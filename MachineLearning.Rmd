@@ -1,0 +1,136 @@
+---
+title: "Predict exercise manner by using machine learning skills"
+author: "wang"
+date: "November 22, 2015"
+output: pdf_document
+---
+
+# Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+# Data 
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+# Goal
+The goal of this project is to predict the manner in which they did the exercise. One key step is to clean the data. I used several criteria to remove data with "NAs" and some insignificant data. A validation data set is also required to find which algorithm is better.
+
+# Summary
+It turns out that the randomForest algorithm leads to the most accurate predicting results with accuracy about 0.998. Thus, I use the randomForest algorithm to predict the exercise manner for the test data.
+
+# Load required packages
+```{r echo = TRUE}
+library(caret); library(rpart); library(rattle); library(randomForest);library(rpart.plot);library(RColorBrewer)
+set.seed(0917) # for reproducible computation
+```
+
+#Load the data
+
+```{r echo = TRUE,cache = TRUE}
+if(!file.exists("pml-training.csv")){
+url.train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv" 
+dest.train <- "pml-training.csv"
+download.file(url.train, dest.train)
+}
+
+data.train <- read.csv("./pml-training.csv")
+dim(data.train)
+
+if(!file.exists("pml-testing.csv")){
+url.test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv" 
+dest.test <- "pml-testing.csv"
+download.file(url.test, dest.test)
+}
+data.test <- read.csv("./pml-testing.csv")
+dim(data.test)
+
+```
+
+# Clean the data
+1, Clean colomns with "NAs"
+```{r echo = TRUE, cache=TRUE}
+data.train <- data.train[, colSums(is.na(data.train)) == 0] 
+data.test <- data.test[, colSums(is.na(data.test)) == 0] 
+dim(data.train); dim(data.test)
+```
+
+2, Remove NearZeroVariance variables
+```{r echo=TRUE,cache =TRUE}
+nzv <- nearZeroVar(data.train, saveMetrics=TRUE)
+data.train <- data.train[,nzv$nzv==FALSE]
+
+nzv<- nearZeroVar(data.test,saveMetrics=TRUE)
+data.test <- data.test[,nzv$nzv==FALSE]
+dim(data.train); dim(data.test)
+```
+
+3, remove quantities related to "X" and "timestamp"
+```{r echo = TRUE}
+trainRemove <- grepl("^X|timestamp", names(data.train))
+data.train <- data.train[, !trainRemove]
+
+testRemove <- grepl("^X|timestamp", names(data.test))
+data.test <- data.test[, !testRemove]
+```
+
+```{r echo=TRUE}
+name.train <- colnames(data.train)
+name.test <- colnames(data.test)
+
+for(i in 1:(length(name.train)-1)){
+    if(name.train[i] != name.train[i]) stop("Need more steps to clean the data")
+}#Make sure the data is clean enough for use
+
+str(data.train)
+```
+
+The data is well cleaned up with `r length(name.train)-1` predictors for both training data and test data. For training data, there are `r dim(data.train)[1]` records  while for testing data, there is `r dim(data.test)[1]` records.
+
+# Split the data into training and validation sub-datasets
+```{r echo = TRUE}
+inTrain <- createDataPartition(y=data.train$classe, p=0.8, list=FALSE)
+Training <- data.train[inTrain, ] 
+Validation <- data.train[-inTrain, ]
+dim(Training); dim(Validation)
+```
+
+We use 80 percent of data for training and 20 percent for validation.
+
+#Prediction by using ML: Decision Tree
+```{r echo = TRUE}
+modfit1 <- rpart(classe ~ ., data=Training, method="class")
+
+fancyRpartPlot(modfit1)
+
+predict.Tree <- predict(modfit1, Validation,type = "class")
+ConFus.Tree <- confusionMatrix(predict.Tree,Validation$classe)
+ConFus.Tree
+```
+
+The accuracy is  `r round(ConFus.Tree$overall['Accuracy'],3)`.
+
+#Prediction by using ML:  randomForest
+```{r echo = TRUE}
+modfit2 <- randomForest(classe ~ ., data=Training)
+
+predict.ranFor <- predict(modfit2, Validation, type = "class")
+ConFus.ranFor <- confusionMatrix(predict.ranFor,Validation$classe)
+ConFus.ranFor
+plot(modfit2)
+```
+
+The accuracy is, amazingly, `r round(ConFus.ranFor$overall['Accuracy'],3)`. Thus, the randomForest algorithm leads to a better prediction result on the validation data set. Therefore, we use the randomForest algorithm to predict exercise manner in the test data set.
+
+#Predicting on the test data by using randomForest algorithm
+```{r echo = TRUE}
+predict.Test <- predict(modfit2, data.test, type = "class")
+predict.Test
+```
